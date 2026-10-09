@@ -48,16 +48,16 @@ pub const STALE_AFTER: Duration = Duration::from_secs(60);
 /// Safe by construction: every prompt-submit hook idempotently re-registers
 /// the session (see `hooks::register_hook_session`), so a live TUI idle past
 /// the backstop gets its row repaired on its next prompt. The cost of a
-/// false-positive reap is bounded — unread direct messages older than the
-/// backstop cascade away with the row — while the cost of no backstop is
+/// false-positive reap is small — the row comes back on the next hook, and
+/// its direct messages and read marks survive the DEL — while the cost of no backstop is
 /// unbounded store growth. Sized generously above any plausible think-time
 /// gap of a live session.
 pub const PULL_STALE_AFTER: Duration = Duration::from_secs(24 * 60 * 60);
 
 /// Messages older than this are pruned by `sweep_messages`, regardless of
-/// recipient. Direct messages already cascade away with a DEL'd recipient
-/// session; this bounds the ones that DON'T — broadcasts addressed to the
-/// never-DEL'd `everyone`/`op:`/`project:` rooms, which otherwise accumulate
+/// recipient. Nothing else removes a message: a direct message outlives a
+/// DEL'd recipient (it comes back under the same id), and broadcasts to the
+/// never-DEL'd `everyone`/`op:`/`project:` rooms would otherwise accumulate
 /// forever (review R6/D). DELing a Message cascades its `MessageRead` rows.
 pub const MESSAGE_TTL: Duration = Duration::from_secs(14 * 24 * 60 * 60);
 
@@ -92,9 +92,9 @@ pub async fn run_sweeper(ctx: MykoServerContext) {
     }
 }
 
-/// Prune messages older than `MESSAGE_TTL`. Bounds the never-cascaded
-/// broadcasts (to `everyone`/`op:`/`project:`, which are never DEL'd) that
-/// would otherwise grow the store without limit. `del_by_id` skips
+/// Prune messages older than `MESSAGE_TTL`. Neither direct messages nor
+/// broadcasts cascade with their recipient, so this is what keeps the store
+/// from growing without limit. `del_by_id` skips
 /// relationship cascades, so the pruned messages' `MessageRead` rows are
 /// swept separately (`sweep_orphan_reads`).
 fn sweep_messages(ctx: &MykoServerContext) {
